@@ -1,0 +1,5 @@
+# Optional local GGUF inference backend
+llama-cpp-python
+
+# Optional browser automation
+playwright
