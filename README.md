@@ -14,7 +14,7 @@ Offline-first autonomous desktop AI agent.
 
 ### Current status
 
-The agent controller, permission layer, learning store, and self-correction layer are implemented as local foundations. The local model adapter is still an inference boundary: a real local model runtime must be connected before Jelon can perform open-ended reasoning.
+The agent controller now sends the local model a structured tool catalog, parses strict JSON plans, executes only registered permission-approved tools, and feeds failures into bounded correction. The local model adapter supports a real llama.cpp GGUF backend when the optional dependency and a compatible model file are installed.
 
 Network, browser, process execution, Git writes, and Git pushes are disabled unless explicitly granted by policy.
 
