@@ -12,3 +12,6 @@ sounddevice
 
 # Optional local speech-to-text
 faster-whisper
+
+# Optional local Windows text-to-speech
+pyttsx3
