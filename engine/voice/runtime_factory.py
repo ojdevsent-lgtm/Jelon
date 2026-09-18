@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .microphone import MicrophoneConfig, MicrophoneStream, ContinuousWakeListener
 from .openwakeword import OpenWakeWordDetector
+from .wake_word import WakeWordConfig
 from .continuous import JelonVoiceRuntime
 from .local_stt import WhisperCommandCapture, FasterWhisperSTT
 
@@ -19,7 +20,7 @@ def build_voice_runtime(
     microphone = MicrophoneStream(MicrophoneConfig())
     detector = OpenWakeWordDetector(
         wake_model_path,
-        config=None if sensitivity == 0.5 else __import__("engine.voice.wake_word", fromlist=["WakeWordConfig"]).WakeWordConfig(sensitivity=sensitivity),
+        config=WakeWordConfig(sensitivity=sensitivity),
     )
     stt = FasterWhisperSTT(stt_model)
     command_capture = WhisperCommandCapture.create(microphone, stt)
