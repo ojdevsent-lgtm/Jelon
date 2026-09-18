@@ -9,3 +9,6 @@ openwakeword
 
 # Optional local audio input
 sounddevice
+
+# Optional local speech-to-text
+faster-whisper
