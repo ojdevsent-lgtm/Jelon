@@ -1,3 +1,5 @@
-"""Computer-control boundary. Implementations are intentionally permission-gated."""
+"""Concrete and injectable computer-control adapters for Jelon."""
 from .tools import ComputerTool
-__all__ = ["ComputerTool"]
+from .windows import WindowsComputerAdapter
+
+__all__ = ["ComputerTool", "WindowsComputerAdapter"]
