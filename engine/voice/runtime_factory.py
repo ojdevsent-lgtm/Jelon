@@ -15,9 +15,12 @@ def build_voice_runtime(
     sensitivity: float = 0.5,
     tts=None,
 ):
-    """Build Jelon's fully local continuous wake -> STT -> agent runtime."""
+    """Build Jelon's local continuous wake -> STT -> agent -> TTS runtime."""
     microphone = MicrophoneStream(MicrophoneConfig())
-    detector = OpenWakeWordDetector(wake_model_path)
+    detector = OpenWakeWordDetector(
+        wake_model_path,
+        config=None if sensitivity == 0.5 else __import__("engine.voice.wake_word", fromlist=["WakeWordConfig"]).WakeWordConfig(sensitivity=sensitivity),
+    )
     stt = FasterWhisperSTT(stt_model)
     command_capture = WhisperCommandCapture.create(microphone, stt)
     listener = ContinuousWakeListener(microphone, detector, lambda: None)
