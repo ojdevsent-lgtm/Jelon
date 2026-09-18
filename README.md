@@ -2,14 +2,28 @@
 
 Offline-first autonomous desktop AI agent.
 
-## v0.1 Agent Core
-- Local model adapter boundary
-- Goal/planning/execution loop
+## v0.1 core
+
+- Local model adapter boundary (no cloud API key required)
+- Bounded goal -> plan -> tool -> observe -> correct loop
 - Permission-aware tool registry
-- SQLite-ready memory abstraction
+- Persistent local task/skill learning
+- Bounded self-correction
 - Browser/research and computer-tool boundaries
-- C# desktop host + Python agent engine
+- Windows desktop host + Python agent engine
 
-Jelon does not require an OpenAI API key or Firebase for its core operation.
+### Current status
 
-Target: Windows 10/11 64-bit.
+The agent controller, permission layer, learning store, and self-correction layer are implemented as local foundations. The local model adapter is still an inference boundary: a real local model runtime must be connected before Jelon can perform open-ended reasoning.
+
+Network, browser, process execution, Git writes, and Git pushes are disabled unless explicitly granted by policy.
+
+## Development
+
+Run the core tests with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Target release platform: Windows 10/11 64-bit.
