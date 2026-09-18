@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Protocol, Any
 
@@ -32,125 +33,93 @@ class AgentResult:
     attempts: int = 0
 
 class AgentController:
-    """Bounded goal -> plan -> tool -> observe -> correct loop.
-
-    Learning is persisted outside the model weights. Tool execution remains
-    constrained by the supplied ToolRegistry/policy.
-    """
-
-    def __init__(
-        self,
-        model: Model | None = None,
-        tool_registry: Any | None = None,
-        learning_store: Any | None = None,
-        self_correction: Any | None = None,
-        max_steps: int = 12,
-    ):
-        self.model = model
-        self.tool_registry = tool_registry
-        self.learning_store = learning_store
-        self.self_correction = self_correction
+    """Bounded goal -> plan -> tool -> observe -> correct loop."""
+    def __init__(self, model=None, tool_registry=None, learning_store=None, self_correction=None, max_steps=12):
+        self.model, self.tool_registry = model, tool_registry
+        self.learning_store, self.self_correction = learning_store, self_correction
         self.max_steps = max_steps
 
-    def plan(self, goal: Goal) -> list[Step]:
-        if self.model is None:
-            return [Step(action="inspect_and_plan", arguments={"goal": goal.text})]
-        raw = self.model.generate(
-            "Return a JSON array of agent steps. Each step must have "
-            '{"action": "...", "tool": null|string, "arguments": {}}. '
-            "Use only the minimum actions required. "
-            f"Goal: {goal.text}"
-        ).strip()
-        try:
-            items = json.loads(raw)
-            if isinstance(items, list):
-                result = []
-                for item in items:
-                    if isinstance(item, dict):
-                        result.append(Step(
-                            action=str(item.get("action", "")),
-                            tool=item.get("tool"),
-                            arguments=item.get("arguments") or {},
-                        ))
-                if result:
-                    return result
-        except (json.JSONDecodeError, TypeError):
-            pass
-        return [Step(action=raw or "inspect_and_plan")]
+    def _tool_context(self):
+        if self.tool_registry is None:
+            return "[]"
+        return json.dumps(self.tool_registry.describe(), ensure_ascii=False)
 
-    def _observe(self, result: Any) -> Observation:
-        if isinstance(result, Observation):
-            return result
-        if isinstance(result, dict):
-            return Observation(
-                bool(result.get("success", False)),
-                str(result.get("output", "")),
-                result.get("data") or {},
-            )
+    @staticmethod
+    def _extract_json(raw):
+        text = str(raw).strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\\s*", "", text, flags=re.I)
+            text = re.sub(r"\\s*```$", "", text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"(\\[[\\s\\S]*\\]|\\{[\\s\\S]*\\})", text)
+            if not match: return None
+            try: return json.loads(match.group(1))
+            except json.JSONDecodeError: return None
+
+    def _steps_from_model(self, raw):
+        parsed = self._extract_json(raw)
+        items = parsed if isinstance(parsed, list) else ([parsed] if isinstance(parsed, dict) else [])
+        result = []
+        for item in items:
+            if not isinstance(item, dict): continue
+            args = item.get("arguments")
+            if not isinstance(args, dict): args = {}
+            result.append(Step(str(item.get("action", "inspect")).strip() or "inspect",
+                               str(item["tool"]) if item.get("tool") is not None else None, args))
+        return result
+
+    def plan(self, goal):
+        if self.model is None: return [Step("inspect_and_plan", arguments={"goal": goal.text})]
+        prompt = (
+            "You are Jelon, a bounded local computer agent. Return ONLY a JSON array of steps. "
+            "Each step is {\"action\":\"...\",\"tool\":null|string,\"arguments\":{}}. "
+            "Use only registered tools; never invent tool names; do not claim actions happened without observations.\n"
+            f"Available tools: {self._tool_context()}\nGoal: {goal.text}\n"
+            f"Context: {json.dumps(goal.context, ensure_ascii=False)}"
+        )
+        return self._steps_from_model(self.model.generate(prompt)) or [Step("inspect_and_plan", arguments={"goal": goal.text})]
+
+    def _observe(self, result):
+        if isinstance(result, Observation): return result
+        if isinstance(result, dict): return Observation(bool(result.get("success", False)), str(result.get("output", "")), result.get("data") or {})
         return Observation(True, str(result))
 
-    def _execute(self, step: Step) -> Observation:
-        if self.tool_registry is None or not step.tool:
-            return Observation(True, f"Planned: {step.action}")
-        executor = getattr(self.tool_registry, "execute", None)
-        if executor is None:
-            return Observation(False, "Tool registry has no execute() method.")
-        try:
-            return self._observe(executor(step.tool, step.arguments))
-        except Exception as exc:
-            return Observation(False, f"{type(exc).__name__}: {exc}")
+    def _execute(self, step):
+        if self.tool_registry is None or not step.tool: return Observation(True, f"Planned: {step.action}")
+        try: return self._observe(self.tool_registry.execute(step.tool, step.arguments))
+        except Exception as exc: return Observation(False, f"{type(exc).__name__}: {exc}")
 
-    def run(self, goal: Goal) -> AgentResult:
-        steps = self.plan(goal)[: self.max_steps]
-        observations: list[Observation] = []
-        attempts = 0
-        index = 0
+    def _correction(self, goal, step, observation, attempt):
+        if self.self_correction is None: return None
+        payload = json.dumps({"failed_step": step.__dict__, "observation": observation.output, "attempt": attempt, "available_tools": self.tool_registry.describe() if self.tool_registry else []}, ensure_ascii=False)
+        instruction = self.self_correction.next_instruction(goal.text, payload, attempt)
+        if not instruction: return None
+        corrected = self._steps_from_model(instruction)
+        return corrected[0] if corrected else self._instruction_to_step(instruction)
 
+    def run(self, goal):
+        steps = self.plan(goal)[:self.max_steps]
+        observations, attempts, index = [], 0, 0
         while index < len(steps) and attempts < self.max_steps:
-            step = steps[index]
-            attempts += 1
-            observation = self._execute(step)
-            observations.append(observation)
-
-            if observation.success:
-                index += 1
-                continue
-
-            if self.self_correction is None:
-                summary = f"Tool '{step.tool}' failed." if step.tool else "Planned step failed."
-                if self.learning_store:
-                    self.learning_store.record_task(goal.text, "failed", summary)
+            step = steps[index]; attempts += 1
+            observation = self._execute(step); observations.append(observation)
+            if observation.success: index += 1; continue
+            corrected = self._correction(goal, step, observation, attempts)
+            if corrected is None:
+                summary = f"Step failed: {observation.output}"
+                if self.learning_store: self.learning_store.record_task(goal.text, "failed", summary)
                 return AgentResult("failed", summary, steps, observations, attempts)
-
-            instruction = self.self_correction.next_instruction(
-                goal.text, observation.output, attempts
-            )
-            if not instruction:
-                summary = "Agent stopped after bounded self-correction attempts."
-                if self.learning_store:
-                    self.learning_store.record_task(goal.text, "failed", summary)
-                return AgentResult("failed", summary, steps, observations, attempts)
-
-            corrected = self._instruction_to_step(instruction)
             steps.insert(index, corrected)
-
         completed = index >= len(steps)
         status = "completed" if completed else "failed"
         summary = "Agent execution completed." if completed else "Agent stopped at execution limit."
-        if self.learning_store:
-            self.learning_store.record_task(goal.text, status, summary)
+        if self.learning_store: self.learning_store.record_task(goal.text, status, summary)
         return AgentResult(status, summary, steps, observations, attempts)
 
     @staticmethod
-    def _instruction_to_step(instruction: str) -> Step:
-        try:
-            item = json.loads(instruction)
-            if isinstance(item, dict):
-                return Step(
-                    action=str(item.get("action", instruction)),
-                    tool=item.get("tool"),
-                    arguments=item.get("arguments") or {},
-                )
-        except (json.JSONDecodeError, TypeError):
-            pass
+    def _instruction_to_step(instruction):
+        parsed = AgentController._extract_json(instruction)
+        if isinstance(parsed, dict): return Step(str(parsed.get("action", instruction)), parsed.get("tool"), parsed.get("arguments") or {})
         return Step(action=instruction)
