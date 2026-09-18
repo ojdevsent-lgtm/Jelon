@@ -5,6 +5,7 @@ from .openwakeword import OpenWakeWordDetector
 from .microphone import MicrophoneConfig, MicrophoneStream, ContinuousWakeListener
 from .continuous import JelonVoiceRuntime
 from .local_stt import SilenceCommandRecorder, FasterWhisperSTT, WhisperCommandCapture
+from .tts import LocalTTS
 from .runtime_factory import build_voice_runtime
 
 __all__ = [
@@ -12,5 +13,5 @@ __all__ = [
     "TranscriptWakeWordDetector", "WakeWordPipeline", "OpenWakeWordDetector",
     "MicrophoneConfig", "MicrophoneStream", "ContinuousWakeListener",
     "JelonVoiceRuntime", "SilenceCommandRecorder", "FasterWhisperSTT",
-    "WhisperCommandCapture", "build_voice_runtime",
+    "WhisperCommandCapture", "LocalTTS", "build_voice_runtime",
 ]
