@@ -13,11 +13,7 @@ class PermissionPolicy:
     allow_processes: bool = False
     allow_browser: bool = False
     allow_network: bool = False
-    allow_git_write: bool = False
     allow_git_push: bool = False
-
-    def allows(self, capability: str) -> bool:
-        return bool(getattr(self, capability, False))
 
 class ToolRegistry:
     def __init__(self, policy: PermissionPolicy | None = None):
@@ -32,9 +28,3 @@ class ToolRegistry:
 
     def names(self) -> list[str]:
         return sorted(self._tools)
-
-    def execute(self, name: str, arguments: dict[str, Any]) -> Any:
-        tool = self.get(name)
-        if tool is None:
-            return None
-        return tool.execute(arguments)

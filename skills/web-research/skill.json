@@ -1,0 +1,11 @@
+{
+  "name": "web-research",
+  "version": "0.1",
+  "description": "Research public technical documentation and record verified procedures.",
+  "capabilities": ["allow_network", "allow_browser"],
+  "verification": {
+    "requires_source": true,
+    "requires_test": true,
+    "stores_result": true
+  }
+}
