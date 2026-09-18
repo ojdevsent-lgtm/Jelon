@@ -3,3 +3,9 @@ llama-cpp-python
 
 # Optional browser automation
 playwright
+
+# Optional local wake-word detection backend
+openwakeword
+
+# Optional local audio input
+sounddevice
