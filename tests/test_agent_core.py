@@ -43,7 +43,22 @@ class AgentCoreTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("Permission denied", result["output"])
 
-    def test_learning_is_persisted(self):
+
+    def test_tool_description_is_available_to_model(self):
+        registry = ToolRegistry(PermissionPolicy(allow_files=True))
+        registry.register(SuccessfulTool())
+        self.assertEqual(registry.describe()[0]["name"], "safe")
+
+    def test_model_json_is_parsed_and_tool_context_is_sent(self):
+        model = FakeModel(['[{"action":"run","tool":"safe","arguments":{"x":1}}]'])
+        registry = ToolRegistry(PermissionPolicy(allow_files=True))
+        registry.register(SuccessfulTool())
+        controller = AgentController(model, registry, max_steps=2)
+        steps = controller.plan(Goal("test"))
+        self.assertEqual(steps[0].tool, "safe")
+        self.assertEqual(steps[0].arguments["x"], 1)
+        self.assertIn("Available tools", model.prompts[0])
+\n    def test_learning_is_persisted(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = LearningStore(str(Path(tmp) / "learning.json"))
             store.record_task("demo", "completed", "ok")
