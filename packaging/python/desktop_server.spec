@@ -1,8 +1,7 @@
 from pathlib import Path
 
 block_cipher = None
-
-project_root = Path(SPEC).resolve().parents[2]
+project_root = Path.cwd()
 
 analysis = Analysis(
     [str(project_root / 'engine' / 'desktop_server.py')],
