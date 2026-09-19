@@ -16,11 +16,12 @@ public sealed class JelonBridge : IAsyncDisposable
     {
         if (IsRunning) return;
 
+        var (fileName, arguments, workingDirectory) = ResolveCore(python);
         var psi = new ProcessStartInfo
         {
-            FileName = python,
-            Arguments = "-m engine.desktop_server",
-            WorkingDirectory = FindRepoRoot(),
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -80,6 +81,16 @@ public sealed class JelonBridge : IAsyncDisposable
                 MessageReceived?.Invoke(JsonSerializer.SerializeToElement(new { type = "log", text = line }));
             }
         }
+    }
+
+    private static (string fileName, string arguments, string workingDirectory) ResolveCore(string python)
+    {
+        var bundledCore = Path.Combine(AppContext.BaseDirectory, "core", "JelonCore.exe");
+        if (File.Exists(bundledCore))
+            return (bundledCore, "", AppContext.BaseDirectory);
+
+        var repoRoot = FindRepoRoot();
+        return (python, "-m engine.desktop_server", repoRoot);
     }
 
     private static string FindRepoRoot()
