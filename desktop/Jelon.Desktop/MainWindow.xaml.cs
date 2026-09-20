@@ -10,6 +10,7 @@ namespace Jelon.Desktop;
 public partial class MainWindow : Window
 {
     private readonly JelonBridge _bridge = new();
+    private bool _computerControlEnabled;
 
     public MainWindow()
     {
@@ -30,6 +31,23 @@ public partial class MainWindow : Window
         {
             CoreStatusText.Text = "Core unavailable";
             AddActivity("Core start failed: " + ex.Message);
+        }
+    }
+
+    private async void ComputerControlButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ComputerControlButton.IsEnabled = false;
+            await _bridge.SetComputerControlAsync(!_computerControlEnabled);
+        }
+        catch (Exception ex)
+        {
+            AddActivity("Computer control error: " + ex.Message);
+        }
+        finally
+        {
+            ComputerControlButton.IsEnabled = true;
         }
     }
 
@@ -69,6 +87,11 @@ public partial class MainWindow : Window
             var type = message.TryGetProperty("type", out var t) ? t.GetString() : "unknown";
             var text = message.TryGetProperty("text", out var tx) ? tx.GetString() ?? "" : "";
 
+            if (message.TryGetProperty("computer_control", out var control))
+            {
+                SetComputerControlVisual(control.GetBoolean());
+            }
+
             switch (type)
             {
                 case "status":
@@ -77,7 +100,17 @@ public partial class MainWindow : Window
                     break;
                 case "result":
                     AddChat("Jelon", text, true);
-                    AddActivity("Task completed.");
+                    if (message.TryGetProperty("observations", out var observations) &&
+                        observations.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var observation in observations.EnumerateArray())
+                        {
+                            var value = observation.GetString();
+                            if (!string.IsNullOrWhiteSpace(value))
+                                AddActivity(value);
+                        }
+                    }
+                    AddActivity("Task " + (message.TryGetProperty("status", out var status) ? status.GetString() : "finished") + ".");
                     break;
                 case "error":
                     AddChat("Jelon", text, true);
@@ -88,6 +121,13 @@ public partial class MainWindow : Window
                     break;
             }
         });
+    }
+
+    private void SetComputerControlVisual(bool enabled)
+    {
+        _computerControlEnabled = enabled;
+        ComputerControlText.Text = enabled ? "ON • TRUSTED WORKSPACE" : "OFF";
+        ComputerControlButton.Content = enabled ? "DISABLE CONTROL" : "ENABLE CONTROL";
     }
 
     private void AddChat(string author, string text, bool jelon)
