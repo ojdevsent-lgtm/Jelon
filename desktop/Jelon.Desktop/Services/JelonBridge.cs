@@ -48,8 +48,11 @@ public sealed class JelonBridge : IAsyncDisposable
         await SendAsync(new { type = "status" });
     }
 
-    public async Task SendGoalAsync(string text)
-        => await SendAsync(new { type = "goal", text });
+    public Task SendGoalAsync(string text)
+        => SendAsync(new { type = "goal", text });
+
+    public Task SetComputerControlAsync(bool enabled)
+        => SendAsync(new { type = "policy.set", computer_control = enabled });
 
     public async Task SendAsync(object message)
     {
